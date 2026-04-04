@@ -205,6 +205,7 @@ function App() {
         patient: data.patient || null,
         reportCount: data.reportCount ?? 0,
         aiPrediction: data.aiPrediction,
+        aiNarrative: data.aiNarrative || null,
         trends: data.trends,
         history: Array.isArray(data.history) ? data.history : [],
         radarData: Array.isArray(data.radarData) ? data.radarData : [],
@@ -238,7 +239,10 @@ function App() {
     return Math.ceil(maxV * 1.15);
   }, [radarRows]);
 
-  const isHighRisk = analysis?.aiPrediction?.risk_level === "High";
+  const triageLevel = analysis?.aiPrediction?.triage_level;
+  const isUrgentTriage = triageLevel === "Urgent";
+  const isPriorityTriage = triageLevel === "Priority";
+  const showAlertBadge = isUrgentTriage || isPriorityTriage;
 
   const resetAddForm = () => {
     setAddForm(emptyBiomarkerForm());
@@ -549,6 +553,23 @@ function App() {
                     </Card>
                   )}
 
+                  {analysis.aiNarrative && (
+                  
+                    <Card className="border border-border/80 shadow-md ring-1 ring-slate-900/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                          AI clinical insight
+                        </CardTitle>
+                        <CardDescription>
+                          Generated from the current lab visit and model triage estimate.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm leading-relaxed text-slate-700">
+                        <p className="whitespace-pre-line">{analysis.aiNarrative}</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
                   <Card className="border border-border/80 shadow-md ring-1 ring-slate-900/5">
                     <CardHeader className="pb-2">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -563,12 +584,12 @@ function App() {
                             </span>
                           </CardDescription>
                         </div>
-                        {isHighRisk && (
+                        {showAlertBadge && (
                           <Badge
                             variant="risk"
                             className="animate-pulse-risk px-3 py-1 uppercase tracking-wide"
                           >
-                            High risk
+                            {isUrgentTriage ? 'Urgent' : 'Priority'}
                           </Badge>
                         )}
                       </div>
@@ -714,19 +735,18 @@ function App() {
                                 Global model output
                               </p>
                               <h2 className="mt-2 flex flex-wrap items-center gap-2 text-3xl font-bold tracking-tight">
-                                {analysis.aiPrediction?.risk_level ?? "—"}
-                                {isHighRisk && (
+                                {analysis.aiPrediction?.triage_level ?? analysis.aiPrediction?.risk_level ?? "—"}
+                                {showAlertBadge && (
                                   <Badge
                                     variant="risk"
                                     className="animate-pulse-risk border-white/20 bg-white/20 text-white hover:bg-white/25"
                                   >
-                                    Flagged
+                                    {isUrgentTriage ? 'Urgent' : 'Priority'}
                                   </Badge>
                                 )}
                               </h2>
                               <p className="mt-3 max-w-md text-xs leading-relaxed text-blue-100/85">
-                                Risk tier derived from predicted HbA1c threshold
-                                (&gt;7% = High).
+                                Triage category derived from the model output and clinical thresholds.
                               </p>
                             </div>
                             <div className="rounded-2xl bg-white/15 p-3 ring-1 ring-white/20">
@@ -906,9 +926,9 @@ function App() {
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
                 <p className="font-semibold text-foreground">Model output</p>
                 <p className="mt-1 text-muted-foreground">
-                  Risk:{" "}
+                  Triage:{" "}
                   <span className="font-medium text-foreground">
-                    {addResult.aiPrediction.risk_level}
+                    {addResult.aiPrediction.triage_level ?? addResult.aiPrediction.risk_level}
                   </span>
                   {" · "}Predicted HbA1c:{" "}
                   <span className="font-medium text-foreground">
