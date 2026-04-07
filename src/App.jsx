@@ -110,7 +110,11 @@ function AnalysisSkeleton() {
           <div className="h-3 w-64 animate-pulse rounded bg-muted/80" />
         </CardHeader>
         <CardContent>
-          <div className="h-[350px] animate-pulse rounded-xl bg-gradient-to-b from-muted/80 to-muted/40" />
+          <div className="flex h-[350px] items-center justify-center rounded-xl bg-gradient-to-b from-muted/80 to-muted/40">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white/15 bg-white/10 shadow-lg">
+              <div className="h-9 w-9 animate-spin rounded-full border-4 border-transparent border-t-primary" />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -162,6 +166,13 @@ function App() {
   const [selectedMedId, setSelectedMedId] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
+  const hospitalNode = analysis?.patient?.hospitalId
+    ? `Hospital ${analysis.patient.hospitalId}`
+    : null;
+  const modelSource = analysis?.aiPrediction?.modelSource ?? 'Global model';
+  const modelOutputLabel = 'Global model output';
+  const showGlobalPrediction = false;
 
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState(emptyBiomarkerForm);
@@ -351,7 +362,7 @@ function App() {
               </p>
               <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
                 Hospital {hospitalId}
-                <span className="font-medium text-slate-500"> · dashboard</span>
+                <span className="font-medium text-slate-500"> · Dashboard</span>
               </h1>
               <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 Search MedID, analyze longitudinal labs, or add a patient for the
@@ -363,7 +374,7 @@ function App() {
                 variant="outline"
                 className="border-primary/25 bg-primary/5 px-3 py-1 text-primary shadow-sm"
               >
-                Node online
+                {loadingAnalysis ? 'Analyzing...' : 'Node online'}
               </Badge>
               <Button
                 type="button"
@@ -514,9 +525,17 @@ function App() {
                             <span>
                               <span className="text-muted-foreground">Node</span>{" "}
                               <span className="font-medium text-foreground">
-                                Hospital {analysis.patient.hospitalId}
+                                {hospitalNode ?? `Hospital ${hospitalId}`}
                               </span>
                             </span>
+                            {modelSource && (
+                              <span>
+                                <span className="text-muted-foreground">Model</span>{" "}
+                                <span className="font-medium text-foreground">
+                                  {modelSource}
+                                </span>
+                              </span>
+                            )}
                             {analysis.patient.age != null && (
                               <span>
                                 <span className="text-muted-foreground">Age</span>{" "}
@@ -530,6 +549,14 @@ function App() {
                                 <span className="text-muted-foreground">Sex</span>{" "}
                                 <span className="font-medium text-foreground">
                                   {analysis.patient.gender}
+                                </span>
+                              </span>
+                            )}
+                            {modelSource && (
+                              <span>
+                                <span className="text-muted-foreground">Model</span>{" "}
+                                <span className="font-medium text-foreground">
+                                  {modelSource}
                                 </span>
                               </span>
                             )}
@@ -732,7 +759,7 @@ function App() {
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <p className="text-xs font-medium text-blue-100/90">
-                                Global model output
+                                {modelOutputLabel}
                               </p>
                               <h2 className="mt-2 flex flex-wrap items-center gap-2 text-3xl font-bold tracking-tight">
                                 {analysis.aiPrediction?.triage_level ?? analysis.aiPrediction?.risk_level ?? "—"}
@@ -746,7 +773,7 @@ function App() {
                                 )}
                               </h2>
                               <p className="mt-3 max-w-md text-xs leading-relaxed text-blue-100/85">
-                                Triage category derived from the model output and clinical thresholds.
+                                Prediction uses {modelSource} on node {hospitalNode ?? `Hospital ${hospitalId}`}.
                               </p>
                             </div>
                             <div className="rounded-2xl bg-white/15 p-3 ring-1 ring-white/20">
@@ -926,11 +953,8 @@ function App() {
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
                 <p className="font-semibold text-foreground">Model output</p>
                 <p className="mt-1 text-muted-foreground">
-                  Triage:{" "}
-                  <span className="font-medium text-foreground">
-                    {addResult.aiPrediction.triage_level ?? addResult.aiPrediction.risk_level}
-                  </span>
-                  {" · "}Predicted HbA1c:{" "}
+                  Hospital: <span className="font-medium text-foreground">{addResult.hospitalId}</span>
+                  {" · "}Triage:{" "}
                   <span className="font-medium text-foreground">
                     {addResult.aiPrediction.predicted_hba1c}%
                   </span>
