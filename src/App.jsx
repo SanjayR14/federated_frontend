@@ -3,7 +3,12 @@ import {
   searchPatients,
   fetchPatientAnalysis,
   addPatientAndPredict,
+  fetchFederatedDashboard,
+  fetchHighRiskPatients,
 } from "@/services/api";
+import { PatientClinicalPanel } from "@/components/clinical/PatientClinicalPanel";
+import { DoctorDashboard } from "@/components/clinical/DoctorDashboard";
+import { FederatedExplainerPanel } from "@/components/clinical/FederatedExplainerPanel";
 import {
   Card,
   CardContent,
@@ -33,6 +38,8 @@ import {
   User,
   ChevronRight,
   UserPlus,
+  LayoutDashboard,
+  Users,
 } from "lucide-react";
 import {
   LineChart,
@@ -170,9 +177,15 @@ function App() {
   const hospitalNode = analysis?.patient?.hospitalId
     ? `Hospital ${analysis.patient.hospitalId}`
     : null;
-  const modelSource = analysis?.aiPrediction?.modelSource ?? 'Global model';
-  const modelOutputLabel = 'Global model output';
-  const showGlobalPrediction = false;
+  const modelSource =
+    analysis?.aiPrediction?.modelSource ||
+    analysis?.aiPrediction?.model_source ||
+    "Global federated ensemble";
+
+  const [viewMode, setViewMode] = useState("patient");
+  const [federatedData, setFederatedData] = useState(null);
+  const [highRiskPatients, setHighRiskPatients] = useState([]);
+  const [federatedLoading, setFederatedLoading] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState(emptyBiomarkerForm);
@@ -217,6 +230,7 @@ function App() {
         reportCount: data.reportCount ?? 0,
         aiPrediction: data.aiPrediction,
         aiNarrative: data.aiNarrative || null,
+        recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
         trends: data.trends,
         history: Array.isArray(data.history) ? data.history : [],
         radarData: Array.isArray(data.radarData) ? data.radarData : [],
@@ -250,10 +264,27 @@ function App() {
     return Math.ceil(maxV * 1.15);
   }, [radarRows]);
 
-  const triageLevel = analysis?.aiPrediction?.triage_level;
-  const isUrgentTriage = triageLevel === "Urgent";
-  const isPriorityTriage = triageLevel === "Priority";
-  const showAlertBadge = isUrgentTriage || isPriorityTriage;
+  const riskCategory =
+    analysis?.aiPrediction?.risk_category || analysis?.aiPrediction?.triage_level;
+  const isHighRisk =
+    riskCategory === "High Risk Diabetes" || riskCategory === "Diabetes";
+  const showAlertBadge = isHighRisk;
+  const modelOutputLabel = riskCategory || "Federated HbA1c estimate";
+
+  useEffect(() => {
+    fetchFederatedDashboard()
+      .then((res) => setFederatedData(res.data))
+      .catch(() => setFederatedData(null));
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== "doctor") return;
+    setFederatedLoading(true);
+    fetchHighRiskPatients(hospitalId)
+      .then((res) => setHighRiskPatients(res.data || []))
+      .catch(() => setHighRiskPatients([]))
+      .finally(() => setFederatedLoading(false));
+  }, [viewMode, hospitalId]);
 
   const resetAddForm = () => {
     setAddForm(emptyBiomarkerForm());
@@ -370,11 +401,37 @@ function App() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-lg border border-border bg-muted/40 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("patient")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    viewMode === "patient"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <Users className="size-3.5" />
+                  Patient
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("doctor")}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    viewMode === "doctor"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <LayoutDashboard className="size-3.5" />
+                  Doctor / Research
+                </button>
+              </div>
               <Badge
                 variant="outline"
                 className="border-primary/25 bg-primary/5 px-3 py-1 text-primary shadow-sm"
               >
-                {loadingAnalysis ? 'Analyzing...' : 'Node online'}
+                {loadingAnalysis ? "Analyzing..." : "Node online"}
               </Badge>
               <Button
                 type="button"
@@ -393,6 +450,30 @@ function App() {
         </header>
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          {viewMode === "doctor" && (
+            <div className="mx-auto max-w-[1400px] space-y-6 p-6 md:p-8">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Federated analytics & clinical decision support
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Population-level federated metrics, model comparison, and high-risk
+                  cohort monitoring — privacy-preserving by design.
+                </p>
+              </div>
+              {federatedLoading ? (
+                <AnalysisSkeleton />
+              ) : (
+                <DoctorDashboard
+                  data={federatedData}
+                  highRiskPatients={highRiskPatients}
+                  hospitalId={hospitalId}
+                />
+              )}
+            </div>
+          )}
+
+          {viewMode === "patient" && (
           <div className="mx-auto grid max-w-[1400px] gap-6 p-6 md:gap-8 md:p-8 lg:grid-cols-12">
             <Card className="border border-border/80 shadow-md ring-1 ring-slate-900/5 lg:col-span-4 xl:col-span-3">
               <CardHeader className="border-b border-border/60 pb-4">
@@ -580,23 +661,14 @@ function App() {
                     </Card>
                   )}
 
-                  {analysis.aiNarrative && (
-                  
-                    <Card className="border border-border/80 shadow-md ring-1 ring-slate-900/5">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-bold uppercase tracking-wide text-slate-500">
-                          AI clinical insight
-                        </CardTitle>
-                        <CardDescription>
-                          Generated from the current lab visit and model triage estimate.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3 text-sm leading-relaxed text-slate-700">
-                        <p className="whitespace-pre-line">{analysis.aiNarrative}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  
+                  <PatientClinicalPanel
+                    aiPrediction={analysis.aiPrediction}
+                    aiNarrative={analysis.aiNarrative}
+                    recommendations={analysis.recommendations}
+                  />
+
+                  <FederatedExplainerPanel summary={federatedData?.clinicalSummary} />
+
                   <Card className="border border-border/80 shadow-md ring-1 ring-slate-900/5">
                     <CardHeader className="pb-2">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -616,7 +688,7 @@ function App() {
                             variant="risk"
                             className="animate-pulse-risk px-3 py-1 uppercase tracking-wide"
                           >
-                            {isUrgentTriage ? 'Urgent' : 'Priority'}
+                            {riskCategory || "Elevated risk"}
                           </Badge>
                         )}
                       </div>
@@ -768,7 +840,7 @@ function App() {
                                     variant="risk"
                                     className="animate-pulse-risk border-white/20 bg-white/20 text-white hover:bg-white/25"
                                   >
-                                    {isUrgentTriage ? 'Urgent' : 'Priority'}
+                                    {riskCategory || "Elevated risk"}
                                   </Badge>
                                 )}
                               </h2>
@@ -845,6 +917,7 @@ function App() {
               )}
             </div>
           </div>
+          )}
         </main>
       </div>
 
@@ -855,7 +928,7 @@ function App() {
           if (!open) resetAddForm();
         }}
         title="New patient & predict"
-        description={`Saves to Hospital ${hospitalId} and runs the global PyTorch model on the eight biomarkers.`}
+        description={`Saves to Hospital ${hospitalId} and runs the federated tree-based HbA1c model (leakage-free features).`}
       >
           <form onSubmit={handleAddPatient} className="space-y-4">
             <p className="rounded-md border border-border/80 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -951,12 +1024,20 @@ function App() {
 
             {addResult?.aiPrediction && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
-                <p className="font-semibold text-foreground">Model output</p>
+                <p className="font-semibold text-foreground">Clinical output</p>
                 <p className="mt-1 text-muted-foreground">
                   Hospital: <span className="font-medium text-foreground">{addResult.hospitalId}</span>
-                  {" · "}Triage:{" "}
+                  {" · "}HbA1c:{" "}
                   <span className="font-medium text-foreground">
                     {addResult.aiPrediction.predicted_hba1c}%
+                  </span>
+                  {" · "}Risk:{" "}
+                  <span className="font-medium text-foreground">
+                    {addResult.aiPrediction.risk_category || addResult.aiPrediction.triage_level}
+                  </span>
+                  {" · "}Confidence:{" "}
+                  <span className="font-medium text-foreground">
+                    {addResult.aiPrediction.confidence_level}
                   </span>
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
